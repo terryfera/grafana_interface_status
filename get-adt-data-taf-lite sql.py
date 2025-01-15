@@ -54,42 +54,17 @@ nb_url = config.nb_url
 headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}    
 login_url = "/ServicesAPI/API/V1/Session"
 
-
-
-
-def get_compliance_result(result_message):
-    # Get PASS/FAIL value from NI result message, only supports single NI status message
-    compliance_result_regex = re.compile(r'\[(\S+)\]')
-    result_message = re.search(compliance_result_regex, result_message)
-    return result_message[1]
-
-def get_rulename(full_rulename):
-    # Parse out rulename from NI name
-    rulename_regex = re.compile(r'(.+)__(.+)__\s--')
-    rulename = re.search(rulename_regex, full_rulename)
-    framework = rulename[2]
-    return rulename[1], framework
-
-def get_ni_ids(adt_row):
-    # Get ID value of NIs that were executed in the ADT
-    ni_id_list = []
-    for cell in adt_row:
-        if "id" in cell:
-            ni_id_list.append(cell["id"])
-    return ni_id_list
-        
-
-def add_data(timestamp, device, rulename, status, result, framework):
+def add_data(timestamp, device, interface, intf_status):
     # Add result to database function
     try:
-        statement = """INSERT INTO results(time, device, rulename, status, result, framework) VALUES (%s, %s, %s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE time=%s, status=%s, result=%s"""
-        data = (timestamp, device, rulename, status, result, framework, timestamp, status, result)
+        statement = """INSERT INTO status(timestamp, device, interface, status) VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE timestamp=%s, status=%s"""
+        data = (timestamp, device, interface, intf_status, timestamp, intf_status)
         cursor.execute(statement, data)
         connection.commit()
-        logger.info(f"Successfully added entry to database {timestamp} | {device} | {rulename} | {framework}")
+        logger.info(f"Successfully added entry to database {timestamp} | {device} | {interface} | {intf_status}")
     except mariadb.Error as e:
-        logger.error(f"Error adding entry to database {timestamp} | {device} | {rulename}: {e}")
+        logger.error(f"Error adding entry to database {timestamp} | {device} | {interface} | Error Message: {e}")
 
 
 # Login to NetBrain and get token
@@ -162,70 +137,13 @@ compliance_results = []
 
 # Loop through ADT table row by row
 for row in result["rows"]:
-    devicename = row[1]["value"]
-    intentIDs = get_ni_ids(row)
+    devicename = row[0]["value"]
+    interface = row[2]["value"]
+    intf_status = row[3]["value"]
+    timestamp = datetime.datetime.now()
 
-    dev_compliance_results = {
-        "device": devicename,
-        "rules": []
-    }
-
-    # Loop through executed Intents in the table
-    for intentID in intentIDs:
-        ni_result_url = "/ServicesAPI/API/V3/CMDB/NI/result"
-        
-        ni_result_body = {
-            "niIdOrPath": intentID,
-            "output": [1] # Results return type (list including what result types you want)
-        }
-        
-        rules_results_list = []
-
-        # Get details of executed intent to populate database
-        if intentID != "":
-            try:
-                # Do the HTTP request
-                response = requests.post(nb_url + ni_result_url, data=json.dumps(ni_result_body), headers=headers, verify=False)
-                # Check for HTTP codes other than 200
-                if response.status_code == 200:
-                    # Decode the JSON response into a dictionary and use the data
-                    result = response.json()
-                    logger.info(f"Get Intent Details successful for - {get_rulename(result["niName"])}")
-                    logger.debug(f"Get Intent Details successful for - {json.dumps(result, indent=4)}")
-                elif response.status_code != 200:
-                    logger.error("Get NI Result failed - " + str(response.text))
-
-            except Exception as e: 
-                logger.error(str(e))
-
-            # Parse Intent results and format to store in database
-            if result["statusCodes"] != []: # Check for intents with empty status codes
-                
-                timestamp = datetime.datetime.fromisoformat(result["timePoint"])
-
-                print(f"Adding {timestamp.strftime("%Y-%m-%d %H:%M:%S")} | {devicename} | {get_rulename(result["niName"])}")
-
-                timestamp_sql = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                rulename, framework = get_rulename(result["niName"])
-                status = get_compliance_result(result["statusCodes"][0])
-                result_message = result["statusCodes"][0]
-
-                # Add entry to local dict
-                rules_result = {
-                    "rulename": rulename,
-                    "timestamp": timestamp_sql,
-                    "status": status,
-                    "result": result_message
-                }
-
-                dev_compliance_results['rules'].append(rules_result)
-
-                # Write entry to database
-                add_data(timestamp_sql, devicename, rulename, status, result_message, framework)
-            else:
-                logger.info(f"Status Code empty for  - {get_rulename(result["niName"])}")
-
-    compliance_results.append(dev_compliance_results)
+    logger.debug(f"Device: {devicename} | Interface: {interface} | Status: {intf_status}")
+    add_data(timestamp.strftime("%Y-%m-%d %H:%M:%S"), devicename, interface, intf_status)
 
 
 # Close Database connection
