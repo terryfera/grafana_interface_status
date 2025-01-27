@@ -54,15 +54,15 @@ nb_url = config.nb_url
 headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}    
 login_url = "/ServicesAPI/API/V1/Session"
 
-def add_data(timestamp, device, interface, intf_status):
+def add_data(timestamp, device, interface, intf_status, site):
     # Add result to database function
     try:
-        statement = """INSERT INTO status(timestamp, device, interface, status) VALUES (%s, %s, %s, %s)
+        statement = """INSERT INTO status(timestamp, device, interface, status, site) VALUES (%s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE timestamp=%s, status=%s"""
-        data = (timestamp, device, interface, intf_status, timestamp, intf_status)
+        data = (timestamp, device, interface, intf_status, site, timestamp, intf_status)
         cursor.execute(statement, data)
         connection.commit()
-        logger.info(f"Successfully added entry to database {timestamp} | {device} | {interface} | {intf_status}")
+        logger.info(f"Successfully added entry to database {timestamp} | {device} | {interface} | {intf_status} | {site}")
     except mariadb.Error as e:
         logger.error(f"Error adding entry to database {timestamp} | {device} | {interface} | Error Message: {e}")
 
@@ -141,9 +141,13 @@ for row in result["rows"]:
     interface = row[2]["value"]
     intf_status = row[3]["value"]
     timestamp = datetime.datetime.now()
+    site = row[5]["value"]
 
-    logger.debug(f"Device: {devicename} | Interface: {interface} | Status: {intf_status}")
-    add_data(timestamp.strftime("%Y-%m-%d %H:%M:%S"), devicename, interface, intf_status)
+    if site == "":
+        site = "Unassigned"
+
+    logger.debug(f"Device: {devicename} | Interface: {interface} | Status: {intf_status} | Site: {site}")
+    add_data(timestamp.strftime("%Y-%m-%d %H:%M:%S"), devicename, interface, intf_status, site)
 
 
 # Close Database connection
