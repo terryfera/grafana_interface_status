@@ -4,10 +4,8 @@ import datetime
 import urllib3
 import json
 import mariadb
-import re
 import logging
 import sys
-import os
 import config
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
