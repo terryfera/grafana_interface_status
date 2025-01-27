@@ -113,7 +113,10 @@ adt_url = "/ServicesAPI/API/V3/TAF/Lite/adt/data"
 
 payload = {
     "endpoint": config.taf_endpoint,
-    "passkey": config.taf_passkey
+    "passkey": config.taf_passkey,
+    "option": {
+        "pageSize": 200
+    }
 }
 
 
